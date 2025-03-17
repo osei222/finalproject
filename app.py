@@ -24,7 +24,8 @@ model_path = os.path.join(os.path.dirname(__file__), "student_performance_model.
 model = joblib.load(model_path)
 
 # Create Dash app inside Flask
-app = dash.Dash(__name__, server=server, routes_pathname_prefix="/dashboard/")
+app = dash.Dash(__name__, server=server, routes_pathname_prefix="/")
+
 
 # Dashboard Layout
 app.layout = html.Div([
@@ -96,9 +97,13 @@ def update_output(n_clicks, study_time, failures, absences):
     return "", px.Figure()
 
 
+from flask import redirect
+
 @server.route("/")
 def index():
-    return "Student Performance Prediction API is Running!"
+    return redirect("/dashboard/")  # Redirect to Dash app
+
+
 
 
 if __name__ == "__main__":
