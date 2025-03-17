@@ -1,80 +1,85 @@
-from flask import Flask, request, jsonify
+from flask import Flask
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 import pandas as pd
-import pickle
-
-import pandas as pd
+import plotly.express as px
 import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+# Initialize Flask app
+server = Flask(__name__)
 
 # Load dataset
-import os
-import pandas as pd
+df = pd.read_csv("dataset/student-mat.csv")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get the current directory
-csv_path = os.path.join(BASE_DIR, "dataset", "student-mat.csv")  # Correct path
+# Load trained model (Ensure 'model.pkl' is in the project folder)
+model = joblib.load("model.pkl")
 
-# Check if the file exists before reading
-if os.path.exists(csv_path):
-    df = pd.read_csv(csv_path, delimiter=";")
-else:
-    print(f"Error: CSV file not found at {csv_path}")
+# Create Dash app inside Flask
+app = dash.Dash(__name__, server=server, routes_pathname_prefix="/dashboard/")
+
+# Dashboard Layout
+app.layout = html.Div([
+    html.H1("📊 Student Performance Prediction", style={"textAlign": "center", "color": "#2c3e50"}),
+
+    html.Div([
+        html.Label("Study Time (hours)"),
+        dcc.Slider(id="study-time", min=1, max=10, step=0.5, value=5,
+                   marks={i: str(i) for i in range(1, 11)}),
+    ], style={"margin-bottom": "20px"}),
+
+    html.Div([
+        html.Label("Failures"),
+        dcc.Dropdown(id="failures", options=[
+            {"label": str(i), "value": i} for i in range(4)], value=0, clearable=False),
+    ], style={"margin-bottom": "20px"}),
+
+    html.Div([
+        html.Label("Absences"),
+        dcc.Input(id="absences", type="number", placeholder="Enter number of absences", value=2),
+    ], style={"margin-bottom": "20px"}),
+
+    html.Button("Predict Performance", id="predict-button", n_clicks=0, style={"backgroundColor": "#27ae60", "color": "white", "padding": "10px", "border": "none"}),
+
+    html.H3(id="prediction-output", style={"color": "blue", "margin-top": "20px"}),
+
+    html.Div([
+        dcc.Graph(id="performance-graph"),
+    ])
+])
 
 
+# Prediction Callback
+@app.callback(
+    [Output("prediction-output", "children"),
+     Output("performance-graph", "figure")],
+    Input("predict-button", "n_clicks"),
+    State("study-time", "value"),
+    State("failures", "value"),
+    State("absences", "value")
+)
+def predict_performance(n_clicks, study_time, failures, absences):
+    if n_clicks > 0:
+        # Convert input into DataFrame
+        input_data = pd.DataFrame([[study_time, failures, absences]],
+                                  columns=["studytime", "failures", "absences"])
+        # Predict using the model
+        prediction = model.predict(input_data)[0]
 
-# Encode categorical variables
-categorical_cols = df.select_dtypes(include=["object"]).columns
-label_encoders = {}
-for col in categorical_cols:
-    le = LabelEncoder()
-    df[col] = le.fit_transform(df[col])
-    label_encoders[col] = le
+        # Generate a graph comparing user input vs dataset
+        filtered_df = df[(df["studytime"] == study_time)]
+        fig = px.histogram(filtered_df, x="G3", nbins=10, title="Distribution of Final Grades (G3)",
+                           labels={"G3": "Final Grade"}, color_discrete_sequence=["#3498db"])
 
-# Convert G3 into classification target
-df["G3_class"] = df["G3"].apply(lambda x: 1 if x >= 10 else 0)
-df.drop(columns=["G3"], inplace=True)
+        return f"Predicted Performance: {prediction}", fig
 
-# Define features and target
-X = df.drop(columns=["G3_class"])
-y = df["G3_class"]
+    return "", px.histogram(df, x="G3")
 
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# Train Decision Tree Model
-model = DecisionTreeClassifier(random_state=42)
-model.fit(X_train, y_train)
-
-# Save model and encoders
-joblib.dump(model, "student_performance_model.pkl")
-joblib.dump(label_encoders, "label_encoders.pkl")
-
-# Evaluate Model
-y_pred = model.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-report = classification_report(y_test, y_pred)
-conf_matrix = confusion_matrix(y_test, y_pred)
-
-print(f"Model Accuracy: {accuracy * 100:.2f}%")
-print("Classification Report:\n", report)
-print("Confusion Matrix:\n", conf_matrix)
-
-# Flask API for Deployment
-
-app = Flask(__name__)
-
-# Load the trained model and label encoders
-with open('student_performance_model.pkl', 'rb') as model_file:
-    model = pickle.load(model_file)
-
-with open('label_encoders.pkl', 'rb') as encoders_file:
-    label_encoders = pickle.load(encoders_file)
-
-@app.route('/')
-def home():
+@server.route("/")
+def index():
     return "Student Performance Prediction API is Running!"
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
+if __name__ == "__main__":
+    server.run(debug=True)
