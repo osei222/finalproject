@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, redirect
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
@@ -19,13 +19,15 @@ else:
     print(f"⚠️ Warning: Dataset file '{DATASET_PATH}' not found!")
 
 # Load trained model safely
-import os
 model_path = os.path.join(os.path.dirname(__file__), "student_performance_model.pkl")
-model = joblib.load(model_path)
+if os.path.exists(model_path):
+    model = joblib.load(model_path)
+else:
+    model = None
+    print(f"⚠️ Warning: Model file '{model_path}' not found!")
 
 # Create Dash app inside Flask
-app = dash.Dash(__name__, server=server, routes_pathname_prefix="/")
-
+app = dash.Dash(__name__, server=server, routes_pathname_prefix="/dashboard/")
 
 # Dashboard Layout
 app.layout = html.Div([
@@ -58,19 +60,28 @@ app.layout = html.Div([
     ])
 ])
 
-
 # Prediction Function
 def predict_performance(study_time, failures, absences):
     if model is None:
         return "Error: Model not found. Please upload 'student_performance_model.pkl'."
 
     try:
-        input_data = pd.DataFrame([[study_time, failures, absences]], columns=model.feature_names_in_)
-        prediction = model.predict(input_data)[0]
+        # Ensure all required features are included
+        input_data = {col: 0 for col in model.feature_names_in_}  # Default values
+
+        # Update only the known values
+        input_data["studytime"] = study_time
+        input_data["failures"] = failures
+        input_data["absences"] = absences
+
+        # Convert to DataFrame
+        input_df = pd.DataFrame([input_data])
+
+        # Make Prediction
+        prediction = model.predict(input_df)[0]
         return prediction
     except Exception as e:
         return f"Prediction Error: {str(e)}"
-
 
 # Prediction Callback
 @app.callback(
@@ -96,16 +107,10 @@ def update_output(n_clicks, study_time, failures, absences):
 
     return "", px.Figure()
 
-
-from flask import redirect
-
+# Redirect root to dashboard
 @server.route("/")
 def index():
-    return redirect("/dashboard/")  # Redirect to Dash app
-
-
-
+    return redirect("/dashboard/")
 
 if __name__ == "__main__":
     server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
-
