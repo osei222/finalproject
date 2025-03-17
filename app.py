@@ -10,7 +10,16 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Load dataset
-df = pd.read_csv(r"C:\Users\Miss Cute\PycharmProjects\pythonProject1\dataset\student-mat.csv", delimiter=";")
+import os
+import pandas as pd
+
+# Get the absolute path of the CSV file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+csv_path = os.path.join(BASE_DIR, "dataset", "student-mat.csv")
+
+# Read the CSV file
+df = pd.read_csv(csv_path, delimiter=";")
+
 
 
 # Encode categorical variables
