@@ -5,15 +5,23 @@ from dash.dependencies import Input, Output, State
 import pandas as pd
 import plotly.express as px
 import joblib
+import os
 
 # Initialize Flask app
 server = Flask(__name__)
 
-# Load dataset
-df = pd.read_csv("dataset/student-mat.csv")
+# Load dataset (Ensure correct file path and delimiter)
+DATASET_PATH = "dataset/student-mat.csv"
+if os.path.exists(DATASET_PATH):
+    df = pd.read_csv(DATASET_PATH, delimiter=";")
+else:
+    df = pd.DataFrame()  # Empty DataFrame to prevent errors
+    print(f"⚠️ Warning: Dataset file '{DATASET_PATH}' not found!")
 
-# Load trained model (Ensure 'model.pkl' is in the project folder)
-model = joblib.load("model.pkl")
+# Load trained model safely
+import os
+model_path = os.path.join(os.path.dirname(__file__), "student_performance_model.pkl")
+model = joblib.load(model_path)
 
 # Create Dash app inside Flask
 app = dash.Dash(__name__, server=server, routes_pathname_prefix="/dashboard/")
@@ -30,8 +38,8 @@ app.layout = html.Div([
 
     html.Div([
         html.Label("Failures"),
-        dcc.Dropdown(id="failures", options=[
-            {"label": str(i), "value": i} for i in range(4)], value=0, clearable=False),
+        dcc.Dropdown(id="failures", options=[{"label": str(i), "value": i} for i in range(4)],
+                     value=0, clearable=False),
     ], style={"margin-bottom": "20px"}),
 
     html.Div([
@@ -39,7 +47,8 @@ app.layout = html.Div([
         dcc.Input(id="absences", type="number", placeholder="Enter number of absences", value=2),
     ], style={"margin-bottom": "20px"}),
 
-    html.Button("Predict Performance", id="predict-button", n_clicks=0, style={"backgroundColor": "#27ae60", "color": "white", "padding": "10px", "border": "none"}),
+    html.Button("Predict Performance", id="predict-button", n_clicks=0,
+                style={"backgroundColor": "#27ae60", "color": "white", "padding": "10px", "border": "none"}),
 
     html.H3(id="prediction-output", style={"color": "blue", "margin-top": "20px"}),
 
@@ -47,6 +56,19 @@ app.layout = html.Div([
         dcc.Graph(id="performance-graph"),
     ])
 ])
+
+
+# Prediction Function
+def predict_performance(study_time, failures, absences):
+    if model is None:
+        return "Error: Model not found. Please upload 'student_performance_model.pkl'."
+
+    try:
+        input_data = pd.DataFrame([[study_time, failures, absences]], columns=model.feature_names_in_)
+        prediction = model.predict(input_data)[0]
+        return prediction
+    except Exception as e:
+        return f"Prediction Error: {str(e)}"
 
 
 # Prediction Callback
@@ -58,22 +80,20 @@ app.layout = html.Div([
     State("failures", "value"),
     State("absences", "value")
 )
-def predict_performance(n_clicks, study_time, failures, absences):
+def update_output(n_clicks, study_time, failures, absences):
     if n_clicks > 0:
-        # Convert input into DataFrame
-        input_data = pd.DataFrame([[study_time, failures, absences]],
-                                  columns=["studytime", "failures", "absences"])
-        # Predict using the model
-        prediction = model.predict(input_data)[0]
+        prediction = predict_performance(study_time, failures, absences)
+        prediction_text = f"Predicted Final Grade: {prediction}"
 
-        # Generate a graph comparing user input vs dataset
-        filtered_df = df[(df["studytime"] == study_time)]
-        fig = px.histogram(filtered_df, x="G3", nbins=10, title="Distribution of Final Grades (G3)",
-                           labels={"G3": "Final Grade"}, color_discrete_sequence=["#3498db"])
+        # Plot histogram only if dataset is available
+        if not df.empty:
+            fig = px.histogram(df, x="G3", title="Distribution of Final Grades")
+        else:
+            fig = px.Figure()
 
-        return f"Predicted Performance: {prediction}", fig
+        return prediction_text, fig
 
-    return "", px.histogram(df, x="G3")
+    return "", px.Figure()
 
 
 @server.route("/")
@@ -82,4 +102,4 @@ def index():
 
 
 if __name__ == "__main__":
-    server.run(debug=True)
+    server.run(host="0.0.0.0", port=5000, debug=True)
