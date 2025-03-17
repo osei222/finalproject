@@ -13,12 +13,14 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import os
 import pandas as pd
 
-# Get the absolute path of the CSV file
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(BASE_DIR, "dataset", "student-mat.csv")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get the current directory
+csv_path = os.path.join(BASE_DIR, "dataset", "student-mat.csv")  # Correct path
 
-# Read the CSV file
-df = pd.read_csv(csv_path, delimiter=";")
+# Check if the file exists before reading
+if os.path.exists(csv_path):
+    df = pd.read_csv(csv_path, delimiter=";")
+else:
+    print(f"Error: CSV file not found at {csv_path}")
 
 
 
